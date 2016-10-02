@@ -1,5 +1,14 @@
 global start                           ; start will be the entry point of our kernel, it needs to be public.
 
+section .rodata                        ; Global Descriptor Table
+gdt64:
+    dq 0 ; zero entry
+    dq (1<<44) | (1<<47) | (1<<41) | (1<<43) | (1<<53) ; code segment
+    dq (1<<44) | (1<<47) | (1<<41) ; data segment
+.pointer:
+    dw $ - gdt64 - 1
+    dq gdt64
+
 section .text                          ; default section for executable code
 bits 32                                ; 32-bit instructions. It’s needed because the CPU is still in Protected mode
                                        ; when GRUB starts our kernel.
@@ -13,6 +22,14 @@ start:
 
     call set_up_page_tables
     call enable_paging
+
+    lgdt [gdt64.pointer]               ; load the 64-bit GDT
+
+    ; update selectors
+    mov ax, 16
+    mov ss, ax  ; stack selector
+    mov ds, ax  ; data selector
+    mov es, ax  ; extra selector
 
     mov dword [0xb8000], 0x2f4b2f4f    ; print `OK` to screen
                                        ; 'O' = 0x4f ; 'K' = 0x4b
