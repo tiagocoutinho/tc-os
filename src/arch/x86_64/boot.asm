@@ -1,9 +1,12 @@
 global start                           ; start will be the entry point of our kernel, it needs to be public.
+extern long_mode_start
 
 section .rodata                        ; Global Descriptor Table
 gdt64:
     dq 0 ; zero entry
+.code: equ $ - gdt64
     dq (1<<44) | (1<<47) | (1<<41) | (1<<43) | (1<<53) ; code segment
+.data: equ $ - gdt64
     dq (1<<44) | (1<<47) | (1<<41) ; data segment
 .pointer:
     dw $ - gdt64 - 1
@@ -26,10 +29,12 @@ start:
     lgdt [gdt64.pointer]               ; load the 64-bit GDT
 
     ; update selectors
-    mov ax, 16
+    mov ax, gdt64.data
     mov ss, ax  ; stack selector
     mov ds, ax  ; data selector
     mov es, ax  ; extra selector
+
+    jmp gdt64.code:long_mode_start
 
     mov dword [0xb8000], 0x2f4b2f4f    ; print `OK` to screen
                                        ; 'O' = 0x4f ; 'K' = 0x4b
