@@ -2,29 +2,48 @@
 # sudo apt-get install xorriso         # manipulate ISO fs images
 # sudo apt-get install qemu-system-x86 # quick PC system emulator
 
-LD = ld -nmagic
-NASM = nasm -f elf64
-GRUB = grub-mkrescue
+arch ?= x86_64
 
-BIN = isofiles/boot/kernel.bin
-LINKER = linker.ld
-OS = os.iso
-ARCH := $(shell getconf LONG_BIT)
+src        := src
+src_arch   := $(src)/arch/$(arch)
 
-all: elf grub
+build      ?= build
+build_arch := $(build)/arch/$(arch)
+build_iso  := $(build)/isofiles
+build_boot := $(build_iso)/boot
 
-grub:
-	grub-mkrescue -o $(OS) isofiles
+kernel     := $(build)/kernel-$(arch).bin
+iso        := $(build)/os-$(arch).iso
 
-elf: boot
-	$(LD) -o $(BIN) -T $(LINKER) multiboot_header.o boot.o
+linker_script := $(src_arch)/linker.ld
+grub_cfg      := $(src_arch)/grub.cfg
+asm_src_files := $(wildcard $(src_arch)/*.asm)
+asm_obj_files := $(patsubst $(src_arch)/%.asm, \
+	$(build_arch)/%.o, $(asm_src_files))
 
-boot:
-	$(NASM) multiboot_header.asm
-	$(NASM) boot.asm
+.PHONY: all clean run iso
+
+all: $(kernel)
 
 clean:
-	rm -f *.o $(BIN) $(OS)
+	rm -r build
 
-start:
-	qemu-system-x86_64 -cdrom $(OS)
+run: $(iso)
+	@qemu-system-x86_64 -cdrom $(iso)
+
+iso: $(iso)
+
+$(iso): $(kernel) $(grub_cfg)
+	mkdir -p $(build_boot)/grub
+	cp $(kernel) $(build_boot)/kernel.bin
+	cp $(grub_cfg) $(build_boot)/grub
+	grub-mkrescue -o $(iso) $(build_iso) 2> /dev/null
+	rm -r $(build_iso)
+
+$(kernel): $(asm_obj_files) $(linker_script)
+	ld -n -T $(linker_script) -o $(kernel) $(asm_obj_files)
+
+# compile assembly files
+build/arch/$(arch)/%.o: src/arch/$(arch)/%.asm
+	mkdir -p $(shell dirname $@)
+	nasm -felf64 $< -o $@
